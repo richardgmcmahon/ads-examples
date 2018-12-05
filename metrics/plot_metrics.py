@@ -16,17 +16,21 @@ Bear in mind, you will have to manually modify max_pages and rows if you are
 doing very large searches.
 """
 
+# standard library
+import os
 import sys
-import numpy
 import argparse
+from datetime import datetime, timedelta
+import subprocess
+
+#
+import numpy
 import matplotlib
 matplotlib.use('TkAgg')
-import seaborn  # simply importing this changes matplotlib styles
-from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
+import seaborn  # simply importing this changes matplotlib styles
 import pandas
 import ads
-import subprocess
 from jinja2 import Template
 
 
@@ -198,7 +202,8 @@ def metrics_to_pandas(metrics):
     return pandas.DataFrame(data, index=pandas.DatetimeIndex(years))
 
 
-def build_latex(metrics, orcid_id=None, plot=None, desc=None):
+def build_latex(metrics, orcid_id=None, plot=None,
+                desc=None, output_path=None):
     """
     Fill in the basic latex template and generate a PDF. This requires the
     user to have PDFLaTeX installed, otherwise it will not work.
@@ -285,7 +290,10 @@ def build_latex(metrics, orcid_id=None, plot=None, desc=None):
         f.write(rendered_latex)
 
     # Build laTeX
-    cmd = ['pdflatex', 'mymetrics.tex']
+    texfile = 'mymetrics.tex'
+    if output_path is not None:
+        texfile = output_path + '/' + texfile
+    cmd = ['pdflatex', texfile]
     print('Building LaTeX: {}'.format(' '.join(cmd)))
     p = subprocess.Popen(
         cmd,
@@ -401,7 +409,10 @@ def get_numbers_of_papers_raw(sq):
     return numpy.array(y), numpy.array(number), numpy.array(number_ref)
 
 
-def main(output_path, figure_format, orcid=False, bibcodes=False, query=False, save=False, plot=False, printable=False, test=False, desc=None):
+def main(output_path, figure_format, orcid=False,
+         bibcodes=False, query=False, save=False,
+         plot=False, printable=False, test=False,
+         desc=None, verbose=False):
 
     # Imports should not be here, but I don't care....
     if test:
@@ -413,6 +424,8 @@ def main(output_path, figure_format, orcid=False, bibcodes=False, query=False, s
     rows = 2000
     max_pages = 1
 
+    print('output_path:', output_path)
+    print('query:', query)
     print('Using rows: {} with max_pages: {}'.format(rows, max_pages))
 
     # See what the user has given to generate the metrics plot
@@ -422,6 +435,10 @@ def main(output_path, figure_format, orcid=False, bibcodes=False, query=False, s
         bibcodes = [i.bibcode for i in sq.articles]
         print('You gave a query: {}'.format(query))
         print('Found {} bibcodes (e.g., {})'.format(len(bibcodes), bibcodes[0:4]))
+        if verbose:
+            for bibcode in bibcodes:
+                print(bibcode)
+
     elif orcid:
         query = 'orcid:{}'.format(orcid)
         sq = ads.SearchQuery(q=query, fl=fl, rows=rows, max_pages=max_pages)
@@ -524,6 +541,20 @@ def main(output_path, figure_format, orcid=False, bibcodes=False, query=False, s
         leg4.draw_frame(False)
 
         figure_path = '{}/metrics.{}'.format(output_path, figure_format)
+        print('output_path:', output_path)
+        print('figure_path:', figure_path)
+
+        # create outpath; should probably catch the exception if path
+        # cannot be created
+        if not os.path.exists(output_path):
+            try:
+                os.makedirs(output_path)
+            except:
+                print("Cannot create output directory for metrics:",
+                      output_path)
+                print("Exiting")
+                sys.exit()
+
         plt.savefig(figure_path)
 
     # Save to disk if requested
@@ -625,6 +656,14 @@ if __name__ == '__main__':
         default=None
     )
 
+
+    parser.add_argument(
+        '--verbose',
+        help='verbose option',
+        action='store_true',
+        default=False
+    )
+
     args = parser.parse_args()
 
     if args.orcid is None and args.query is None and args.bibcodes is None:
@@ -641,5 +680,6 @@ if __name__ == '__main__':
         printable=args.printable,
         plot=args.plot,
         test=args.test,
-        desc=args.description
+        desc=args.description,
+        verbose=args.verbose
     )
